@@ -92,21 +92,22 @@ void QuadEstimatorEKF::UpdateFromIMU(V3F accel, V3F gyro)
   // SMALL ANGLE GYRO INTEGRATION:
 
   // current estimates rollEst, pitchEst, ekfState(6) <- this is yaw estimate
-  // Since calculating jacobians is tideous , we will use the quaternions
+  float T_s = dtIMU;
   float yawEst = ekfState(6);
-  Quaternion<float> attitude_estimate;
-  attitude_estimate = Quaternion<float>::FromEuler123_RPY(rollEst, pitchEst, yawEst);
 
-  // time step size is dtIMU
-  // Integrating the angular rates for dtIMU time
-  V3D body_rates(gyro.x, gyro.y, gyro.z); // rates in body frame
-  attitude_estimate.IntegrateBodyRate(body_rates, dtIMU); 
+  //we use the state to define a quaternion, qt, for the euler angles for φ, θ and ψ.
+  Quaternion<float> q_t;
+  q_t = Quaternion<float>::FromEuler123_RPY(rollEst, pitchEst, yawEst);
 
-  //Update the attitude estimates
-  float predictedRoll = attitude_estimate.Roll(); // returns angles in world frame
-  float predictedPitch = attitude_estimate.Pitch();
-  yawEst = attitude_estimate.Yaw();
-  ekfState(6) = yawEst;
+  V3D dq(gyro.x, gyro.y, gyro.z); // rates in body frame
+  //  predicted quaternion q_bar_t = dq ∗ qt 
+  Quaternion<float> q_bar_t = q_t.IntegrateBodyRate(dq, T_s); 
+ 
+  // Predicted Estimates
+  float phi_bar_t = q_bar_t.Roll(); // returns angles in world frame
+  float theta_bar_t = q_bar_t.Pitch();
+  float psi_bar_t = q_bar_t.Yaw();
+  ekfState(6) = psi_bar_t;
 
   // normalize yaw to -pi .. pi
   if (ekfState(6) > F_PI) ekfState(6) -= 2.f*F_PI;
@@ -119,8 +120,8 @@ void QuadEstimatorEKF::UpdateFromIMU(V3F accel, V3F gyro)
   accelPitch = atan2f(-accel.x, 9.81f);
 
   // FUSE INTEGRATION AND UPDATE
-  rollEst = attitudeTau / (attitudeTau + dtIMU) * (predictedRoll)+dtIMU / (attitudeTau + dtIMU) * accelRoll;
-  pitchEst = attitudeTau / (attitudeTau + dtIMU) * (predictedPitch)+dtIMU / (attitudeTau + dtIMU) * accelPitch;
+  rollEst = attitudeTau / (attitudeTau + T_s) * (phi_bar_t)+T_s / (attitudeTau + T_s) * accelRoll;
+  pitchEst = attitudeTau / (attitudeTau + T_s) * (theta_bar_t)+T_s / (attitudeTau + T_s) * accelPitch;
 
   lastGyro = gyro;
 }
