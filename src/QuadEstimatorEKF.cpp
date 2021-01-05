@@ -90,12 +90,23 @@ void QuadEstimatorEKF::UpdateFromIMU(V3F accel, V3F gyro)
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
   // SMALL ANGLE GYRO INTEGRATION:
-  // (replace the code below)
-  // make sure you comment it out when you add your own code -- otherwise e.g. you might integrate yaw twice
 
-  float predictedPitch = pitchEst + dtIMU * gyro.y;
-  float predictedRoll = rollEst + dtIMU * gyro.x;
-  ekfState(6) = ekfState(6) + dtIMU * gyro.z;	// yaw
+  // current estimates rollEst, pitchEst, ekfState(6) <- this is yaw estimate
+  // Since calculating jacobians is tideous , we will use the quaternions
+  float yawEst = ekfState(6);
+  Quaternion<float> attitude_estimate;
+  attitude_estimate = Quaternion<float>::FromEuler123_RPY(rollEst, pitchEst, yawEst);
+
+  // time step size is dtIMU
+  // Integrating the angular rates for dtIMU time
+  V3D body_rates(gyro.x, gyro.y, gyro.z); // rates in body frame
+  attitude_estimate.IntegrateBodyRate(body_rates, dtIMU); 
+
+  //Update the attitude estimates
+  float predictedRoll = attitude_estimate.Roll(); // returns angles in world frame
+  float predictedPitch = attitude_estimate.Pitch();
+  yawEst = attitude_estimate.Yaw();
+  ekfState(6) = yawEst;
 
   // normalize yaw to -pi .. pi
   if (ekfState(6) > F_PI) ekfState(6) -= 2.f*F_PI;
